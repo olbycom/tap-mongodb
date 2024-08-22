@@ -62,7 +62,7 @@ class TapMongoDB(Tap):
             description="Database name from which records will be extracted.",
         ),
         th.Property(
-            "connection_string_type",
+            "connection_type",
             th.StringType,
             allowed_values=["mongodb", "mongodb+srv"],
             default="mongodb",
