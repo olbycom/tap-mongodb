@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "tap-mongodb",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceRoot}/tap_mongodb/tap.py",
+      "console": "integratedTerminal",
+      "args": ["--config", ".secrets/config.json"],
+      "env": { "PYTHONPATH": "${workspaceRoot}" },
+      // Change this to false if you wish to debug and add breakpoints outside of your code e.g. the singer-sdk package
+      "justMyCode": false
+    }
+  ]
+}
