@@ -26,10 +26,47 @@ class TapMongoDB(Tap):
 
     config_jsonschema = th.PropertiesList(
         th.Property(
+            "host",
+            th.StringType,
+            description=(
+                "Hostname for MongoDB instance. " + "Note if mongodb_connection_string is set this will be ignored."
+            ),
+        ),
+        th.Property(
+            "port",
+            th.IntegerType,
+            default=27017,
+            description=(
+                "The port on which MongoDB is awaiting connection. "
+                + "Note if mongodb_connection_string is set this will be ignored."
+            ),
+        ),
+        th.Property(
+            "user",
+            th.StringType,
+            description=(
+                "User name used to authenticate. " + "Note if mongodb_connection_string is set this will be ignored."
+            ),
+        ),
+        th.Property(
+            "password",
+            th.StringType,
+            description=(
+                "Password used to authenticate. " + "Note if mongodb_connection_string is set this will be ignored."
+            ),
+        ),
+        th.Property(
             "database",
             th.StringType,
             required=True,
             description="Database name from which records will be extracted.",
+        ),
+        th.Property(
+            "connection_string_type",
+            th.StringType,
+            allowed_values=["mongodb", "mongodb+srv"],
+            default="mongodb",
+            description="Identify connection format, by using either standard connection format (mongodb) or SRV connection format (mongodb+srv). To learn more about each format, see Standard Connection String Format (https://www.mongodb.com/docs/manual/reference/connection-string/#std-label-connections-standard-connection-string-format) and SRV Connection Format (https://www.mongodb.com/docs/manual/reference/connection-string/#std-label-connections-dns-seedlist).",
         ),
         th.Property(
             "mongodb_connection_string",
@@ -65,6 +102,17 @@ class TapMongoDB(Tap):
                 "connection string options when using documentdb_credential_json_string. For example, when set to "
                 'the string `{"tls":"true","tlsCAFile":"my-ca-bundle.pem"}`, the options '
                 "`tls=true&tlsCAFile=my-ca-bundle.pem` will be passed to the MongoClient."
+            ),
+        ),
+        th.Property(
+            "mongodb_extra_options_string",
+            th.StringType,
+            required=False,
+            description=(
+                "String containing extra options to be added to the "
+                "connection string when using host, port, password and username authentication. For example: "
+                "`retryWrites=true&w=majority&appName=platform-prod`, read this "
+                "for more detail: https://www.mongodb.com/docs/manual/reference/connection-string/#std-label-connections-connection-options."
             ),
         ),
         th.Property(
@@ -178,7 +226,23 @@ class TapMongoDB(Tap):
 
     def _get_mongo_connection_string(self) -> Optional[str]:
         """Get configured MongoDB connection URI."""
-        documentdb_credential_json_string = self.config.get("documentdb_credential_json_string", None)
+        host = self.config.get("host")
+        username = self.config.get("username")
+        password = self.config.get("password")
+        connection_type = self.config.get("connection_type", "mongodb")
+        if all([host, username, password]):
+            self.logger.debug("Using separated host, port, username and password configs.")
+            connection_string = f"{connection_type}://{quote_plus(username)}:{quote_plus(password)}@{host}"
+            if connection_type == "mongodb":
+                port = self.config.get("port")
+                if port:
+                    return f"{connection_string}:{port}" + self._get_mongo_extra_options_string()
+                else:
+                    raise ValueError("Port is required when using standard connection string.")
+
+            return connection_string + self._get_mongo_extra_options_string()
+
+        documentdb_credential_json_string = self.config.get("documentdb_credential_json_string")
         if documentdb_credential_json_string is not None:
             self.logger.debug("Using documentdb_credential_json_string")
             documentdb_credential_json: dict[str, Any] = json.loads(documentdb_credential_json_string)
@@ -186,27 +250,35 @@ class TapMongoDB(Tap):
             password: str = documentdb_credential_json.get("password")
             host: str = documentdb_credential_json.get("host")
             port: int = documentdb_credential_json.get("port")
-            connection_string = f"mongodb://{quote_plus(username)}:{quote_plus(password)}@{host}:{port}"
+            connection_type: str = documentdb_credential_json.get("connection_type", "mongodb")
+            connection_string = f"{connection_type}://{quote_plus(username)}:{quote_plus(password)}@{host}:{port}"
             return connection_string
 
         self.logger.debug("Using mongodb_connection_string")
-        return self.config.get("mongodb_connection_string", None)
+        return self.config.get("mongodb_connection_string")
 
-    def _get_mongo_options(self) -> dict[str, Any]:
+    def _get_mongo_extra_options_dict(self) -> dict[str, Any]:
         """Get configured MongoDB/DocumentDB extra options"""
         documentdb_credential_json_extra_options_string = self.config.get(
             "documentdb_credential_json_extra_options", None
         )
         if documentdb_credential_json_extra_options_string is None:
             return {}
-        return json.loads(documentdb_credential_json_extra_options_string)
+        return f"/?{documentdb_credential_json_extra_options_string}"
+
+    def _get_mongo_extra_options_string(self) -> str:
+        """Get configured MongoDB/DocumentDB extra options"""
+        mongo_extra_options_string = self.config.get("mongodb_extra_options_string")
+        if mongo_extra_options_string is None:
+            return ""
+        return f"/?{mongo_extra_options_string}"
 
     @cached_property
     def connector(self) -> MongoDBConnector:
         """Get MongoDBConnector instance. Instance is cached and reused."""
         return MongoDBConnector(
             self._get_mongo_connection_string(),
-            self._get_mongo_options(),
+            self._get_mongo_extra_options_dict(),
             self.config.get("database"),
             self.config.get("datetime_conversion"),
             prefix=self.config.get("prefix", None),
