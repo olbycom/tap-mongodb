@@ -105,7 +105,7 @@ class TapMongoDB(Tap):
             ),
         ),
         th.Property(
-            "mongodb_extra_options_string",
+            "extra_options",
             th.StringType,
             required=False,
             description=(
@@ -268,7 +268,7 @@ class TapMongoDB(Tap):
 
     def _get_mongo_extra_options_string(self) -> str:
         """Get configured MongoDB/DocumentDB extra options"""
-        mongo_extra_options_string = self.config.get("mongodb_extra_options_string")
+        mongo_extra_options_string = self.config.get("extra_options")
         if mongo_extra_options_string is None:
             return ""
         return f"/?{mongo_extra_options_string}"
