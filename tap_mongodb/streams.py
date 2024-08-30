@@ -121,55 +121,6 @@ class MongoDBCollectionStream(Stream):
 
         return self.replication_method == REPLICATION_INCREMENTAL
 
-    def _increment_stream_state(self, latest_record: dict[str, Any], *, context: dict | None = None) -> None:
-        """Update state of stream or partition with data from the provided record.
-
-        Raises `InvalidStreamSortException` is `self.is_sorted = True` and unsorted data
-        is detected.
-
-        Args:
-            latest_record: TODO
-            context: Stream partition or context dictionary.
-
-        Raises:
-            ValueError: if configured replication method is unsupported, or if replication key is absent
-
-        """
-
-        # This also creates a state entry if one does not yet exist:
-        state_dict = self.get_context_state(context)
-
-        # Advance state bookmark values if applicable
-        if self.replication_method not in {
-            REPLICATION_INCREMENTAL,
-            REPLICATION_LOG_BASED,
-        }:
-            msg = (
-                f"Unrecognized replication method {self.replication_method}. Only {REPLICATION_INCREMENTAL} and"
-                f" {REPLICATION_LOG_BASED} replication methods are supported."
-            )
-            self.logger.critical(msg)
-            raise ValueError(msg)
-
-        if not self.replication_key:
-            raise ValueError(
-                f"Could not detect replication key for '{self.name}' stream"
-                f"(replication method={self.replication_method})",
-            )
-        treat_as_sorted = self.is_sorted
-        if not treat_as_sorted and self.state_partitioning_keys is not None:
-            # Streams with custom state partitioning are not resumable.
-            treat_as_sorted = False
-        increment_state(
-            state_dict,
-            replication_key=self.replication_key,
-            latest_record=latest_record,
-            is_sorted=treat_as_sorted,
-            check_sorted=self.check_sorted,
-        )
-
-        return self
-
     def _generate_record_messages(self, record: dict) -> Generator[singer.RecordMessage, None, None]:
         """Write out a RECORD message.
 
