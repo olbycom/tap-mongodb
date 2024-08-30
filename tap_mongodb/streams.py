@@ -19,7 +19,13 @@ from singer_sdk.helpers._catalog import pop_deselected_record_properties
 from singer_sdk.helpers._state import increment_state
 from singer_sdk.helpers._typing import conform_record_data_types
 from singer_sdk.helpers._util import utc_now
-from singer_sdk.streams.core import REPLICATION_INCREMENTAL, REPLICATION_LOG_BASED, Stream, TypeConformanceLevel
+from singer_sdk.streams.core import (
+    REPLICATION_FULL_TABLE,
+    REPLICATION_INCREMENTAL,
+    REPLICATION_LOG_BASED,
+    Stream,
+    TypeConformanceLevel,
+)
 
 from tap_mongodb.connector import MongoDBConnector
 from tap_mongodb.types import IncrementalId
@@ -204,7 +210,7 @@ class MongoDBCollectionStream(Stream):
         should_add_metadata: bool = self.config.get("add_record_metadata", False)
         collection: Collection = self._connector.database[self._collection_name]
 
-        if self.replication_method == REPLICATION_INCREMENTAL:
+        if self.replication_method in [REPLICATION_INCREMENTAL, REPLICATION_FULL_TABLE]:
             if bookmark:
                 self.logger.debug(f"using existing bookmark: {bookmark}")
                 start_date = to_object_id(bookmark)
